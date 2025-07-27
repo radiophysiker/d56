@@ -9,7 +9,8 @@ import (
 
 // DatabaseConnection представляет подключение к базе данных
 type DatabaseConnection struct {
-	db *sqlx.DB
+	db    *sqlx.DB
+	txMgr TransactionManager
 }
 
 // NewPostgreSQLConnection создает новое подключение к PostgreSQL
@@ -28,12 +29,20 @@ func NewPostgreSQLConnection(databaseURI string) (*DatabaseConnection, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &DatabaseConnection{db: db}, nil
+	return &DatabaseConnection{
+		db:    db,
+		txMgr: NewPostgreSQLTransactionManager(db),
+	}, nil
 }
 
 // GetDB возвращает объект базы данных для использования в репозиториях
 func (dc *DatabaseConnection) GetDB() *sqlx.DB {
 	return dc.db
+}
+
+// GetTransactionManager возвращает менеджер транзакций
+func (dc *DatabaseConnection) GetTransactionManager() TransactionManager {
+	return dc.txMgr
 }
 
 // Close закрывает подключение к базе данных

@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/radiophysiker/d56/internal/domain/user"
 	"github.com/radiophysiker/d56/internal/domain/withdrawal"
+	"github.com/radiophysiker/d56/internal/infrastructure/database"
 )
 
 type WithdrawalRepository struct {
@@ -24,7 +25,10 @@ func (r *WithdrawalRepository) Save(ctx context.Context, w *withdrawal.Withdrawa
 		RETURNING id
 	`
 	var id withdrawal.WithdrawalID
-	return r.db.QueryRowContext(ctx, query,
+
+	// Используем контекст для определения DB или транзакции
+	executor := database.GetTxOrDB(ctx, r.db)
+	return executor.QueryRowContext(ctx, query,
 		w.UserID(), w.OrderNumber(), w.Amount(), w.ProcessedAt()).Scan(&id)
 }
 
@@ -36,7 +40,8 @@ func (r *WithdrawalRepository) FindByUserID(ctx context.Context, userID user.Use
 		ORDER BY processed_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	executor := database.GetTxOrDB(ctx, r.db)
+	rows, err := executor.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, err
 	}

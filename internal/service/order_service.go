@@ -7,17 +7,24 @@ import (
 
 	"github.com/radiophysiker/d56/internal/domain/order"
 	"github.com/radiophysiker/d56/internal/domain/user"
+	"github.com/radiophysiker/d56/internal/infrastructure/database"
 )
 
 type OrderService struct {
 	orderRepo order.Repository
 	userRepo  user.Repository
+	txManager database.TransactionManager
 }
 
-func NewOrderService(orderRepo order.Repository, userRepo user.Repository) *OrderService {
+func NewOrderService(
+	orderRepo order.Repository,
+	userRepo user.Repository,
+	txManager database.TransactionManager,
+) *OrderService {
 	return &OrderService{
 		orderRepo: orderRepo,
 		userRepo:  userRepo,
+		txManager: txManager,
 	}
 }
 
@@ -50,35 +57,44 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID user.UserID, numb
 	return newOrder, true, nil // Возвращаем новый заказ
 }
 
-func (s *OrderService) GetUserOrders(ctx context.Context, userID user.UserID) ([]*order.Order, error) {
-	return s.orderRepo.FindByUserID(ctx, userID)
-}
-
 func (s *OrderService) UpdateOrderStatus(ctx context.Context, orderNumber string, status order.Status, accrual *float64) error {
-	orderEntity, err := s.orderRepo.FindByNumber(ctx, orderNumber)
-	if err != nil {
-		return err
-	}
+	// Выполняем операцию в рамках транзакции согласно DDD
+	return s.txManager.WithTransactionContext(ctx, func(txCtx context.Context) error {
+		// Получаем заказ
+		orderEntity, err := s.orderRepo.FindByNumber(txCtx, orderNumber)
+		if err != nil {
+			return err
+		}
 
-	orderEntity.SetStatus(status)
-	if accrual != nil && status == order.StatusProcessed {
-		orderEntity.SetAccrual(*accrual)
+		// Обновляем статус заказа (Domain Logic)
+		orderEntity.SetStatus(status)
+		if accrual != nil && status == order.StatusProcessed {
+			orderEntity.SetAccrual(*accrual)
 
-		// Если заказ обработан и есть начисление, обновляем баланс пользователя
-		if *accrual > 0 {
-			user, err := s.userRepo.FindByID(ctx, orderEntity.UserID())
-			if err != nil {
-				return err
-			}
+			// Если заказ обработан и есть начисление, обновляем баланс пользователя
+			if *accrual > 0 {
+				user, err := s.userRepo.FindByID(txCtx, orderEntity.UserID())
+				if err != nil {
+					return err
+				}
 
-			user.AddBalance(*accrual)
-			if err := s.userRepo.Save(ctx, user); err != nil {
-				return err
+				// Добавляем баланс (Domain Logic)
+				user.AddBalance(*accrual)
+
+				// Сохраняем пользователя (автоматически в транзакции через контекст)
+				if err := s.userRepo.Save(txCtx, user); err != nil {
+					return err
+				}
 			}
 		}
-	}
 
-	return s.orderRepo.Update(ctx, orderEntity)
+		// Сохраняем заказ (автоматически в транзакции через контекст)
+		return s.orderRepo.Update(txCtx, orderEntity)
+	})
+}
+
+func (s *OrderService) GetUserOrders(ctx context.Context, userID user.UserID) ([]*order.Order, error) {
+	return s.orderRepo.FindByUserID(ctx, userID)
 }
 
 func (s *OrderService) GetPendingOrders(ctx context.Context) ([]*order.Order, error) {

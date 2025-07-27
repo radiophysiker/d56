@@ -6,6 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/radiophysiker/d56/internal/domain/user"
+	"github.com/radiophysiker/d56/internal/infrastructure/database"
 )
 
 type UserRepository struct {
@@ -25,7 +26,10 @@ func (r *UserRepository) Save(ctx context.Context, u *user.User) error {
 			withdrawn_balance = EXCLUDED.withdrawn_balance
 	`
 	balance := u.Balance()
-	_, err := r.db.ExecContext(ctx, query, u.ID(), u.Login(), u.PasswordHash(), balance.Current, balance.Withdrawn, u.CreatedAt())
+
+	// Используем контекст для определения DB или транзакции
+	executor := database.GetTxOrDB(ctx, r.db)
+	_, err := executor.ExecContext(ctx, query, u.ID(), u.Login(), u.PasswordHash(), balance.Current, balance.Withdrawn, u.CreatedAt())
 	return err
 }
 
@@ -37,7 +41,8 @@ func (r *UserRepository) FindByLogin(ctx context.Context, login string) (*user.U
 	var balance user.Balance
 	var createdAt time.Time
 
-	err := r.db.QueryRowContext(ctx, query, login).Scan(
+	executor := database.GetTxOrDB(ctx, r.db)
+	err := executor.QueryRowContext(ctx, query, login).Scan(
 		&id, &userLogin, &passwordHash, &balance.Current, &balance.Withdrawn, &createdAt,
 	)
 	if err != nil {
@@ -55,7 +60,8 @@ func (r *UserRepository) FindByID(ctx context.Context, id user.UserID) (*user.Us
 	var balance user.Balance
 	var createdAt time.Time
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
+	executor := database.GetTxOrDB(ctx, r.db)
+	err := executor.QueryRowContext(ctx, query, id).Scan(
 		&userID, &login, &passwordHash, &balance.Current, &balance.Withdrawn, &createdAt,
 	)
 	if err != nil {

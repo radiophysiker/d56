@@ -110,9 +110,11 @@ func (c *Container) initRepositories() {
 
 // initServices инициализирует сервисы
 func (c *Container) initServices(logger *zap.Logger) {
+	txManager := c.dbConnection.GetTransactionManager()
+
 	c.userService = service.NewUserService(c.userRepo, c.passwordService)
-	c.orderService = service.NewOrderService(c.orderRepo, c.userRepo)
-	c.withdrawalService = service.NewWithdrawalService(c.withdrawalRepo, c.userRepo)
+	c.orderService = service.NewOrderService(c.orderRepo, c.userRepo, txManager)
+	c.withdrawalService = service.NewWithdrawalService(c.withdrawalRepo, c.userRepo, txManager)
 
 	// Accrual processor service (if accrual client is available)
 	if c.accrualClient != nil {

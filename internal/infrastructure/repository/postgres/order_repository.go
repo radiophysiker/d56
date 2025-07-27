@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/radiophysiker/d56/internal/domain/order"
 	"github.com/radiophysiker/d56/internal/domain/user"
+	"github.com/radiophysiker/d56/internal/infrastructure/database"
 )
 
 type OrderRepository struct {
@@ -152,7 +153,9 @@ func (r *OrderRepository) Update(ctx context.Context, o *order.Order) error {
 		SET status = $1, accrual = $2, processed_at = $3 
 		WHERE id = $4
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	// Используем контекст для определения DB или транзакции
+	executor := database.GetTxOrDB(ctx, r.db)
+	_, err := executor.ExecContext(ctx, query,
 		string(o.Status()), o.Accrual(), o.ProcessedAt(), o.ID())
 	return err
 }

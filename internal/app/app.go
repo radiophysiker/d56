@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -37,7 +36,6 @@ func Run() error {
 	logger.Info("Loaded config", zap.Any("config", cfg))
 
 	// Initialize dependency injection container
-	// Здесь происходит подключение к БД в Infrastructure Layer
 	diContainer, err := container.NewContainer(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("cannot initialize DI container: %w", err)
@@ -79,7 +77,7 @@ func Run() error {
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
